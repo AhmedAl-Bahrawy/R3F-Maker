@@ -1,35 +1,44 @@
+// Experience.jsx
 import React, { useMemo, useRef } from "react";
-import { PerspectiveCamera, OrbitControls, useScroll } from "@react-three/drei";
+import { PerspectiveCamera, OrbitControls } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import Curve from "./Curve";
 import { Spaceship } from "./Models/Spaceship";
 
-const LINE_NB_POINTS = 2000;
+const LINE_NB_POINTS = 100000;
 
 export default function Experience() {
   // --- path curve (كما في الأصل) ---
-  const curve = Curve();
+  const curve = useMemo(() => Curve(), []);
   const linePoints = useMemo(() => curve.getPoints(LINE_NB_POINTS), [curve]);
+  const curveLength = useMemo(() => curve.getLength(), [curve]);
 
-  // refs (مثل الأصلي، بدون اختراعات) --- renamed to spaceship
+  // refs
   const spaceshipRef = useRef();
-  const followCamRef = useRef(); // هذه ستكون الكاميرا الافتراضية (makeDefault)
+  const followCamRef = useRef(); // الكاميرا الأساسية (makeDefault)
   const overviewCamRef = useRef();
 
   // helper lines refs
-  const lookLineRef = useRef(); // camera -> look target (yellow)
-  const camForwardRef = useRef(); // camera forward (cyan)
-  const forwardLineRef = useRef(); // spaceship forward (blue)
-  const rightLineRef = useRef(); // spaceship right (red)
-  const upLineRef = useRef(); // spaceship up (green)
+  const lookLineRef = useRef();
+  const camForwardRef = useRef();
+  const forwardLineRef = useRef();
+  const rightLineRef = useRef();
+  const upLineRef = useRef();
 
-  const scroll = useScroll();
+  // progress along the curve (0..1)
+  const progress = useRef(0);
+
+  // 🔧 المتغير الوحيد اللي يتحكم في سرعة السفينة (وحدات / ثانية)
+  // shipSpeed = 10  => السفينة تمشي بمعدل 10 وحدات عالمية في الثانية على طول المسار
+  // غيّره حسب ما تريد.
+  const shipSpeed = 15;
 
   // reusable vectors لتقليل allocations
   const tmpA = useMemo(() => new THREE.Vector3(), []);
   const tmpB = useMemo(() => new THREE.Vector3(), []);
-  const localCamOffset = useMemo(() => new THREE.Vector3(0, 2, -6), []); // offset خلف السفينة
+  const tmpC = useMemo(() => new THREE.Vector3(), []);
+  const localCamOffset = useMemo(() => new THREE.Vector3(0, 2, -6), []);
 
   // helper لتحديث line من نقطة a إلى b
   const setLineFromTo = (lineRef, a, b) => {
@@ -41,37 +50,45 @@ export default function Experience() {
     lineRef.current.geometry.computeBoundingSphere();
   };
 
-  // main update loop
   useFrame((state, delta) => {
     if (!spaceshipRef.current) return;
 
-    // احسب موقع السفينة على المسار حسب scroll.offset
-    const idx = Math.min(
-      Math.round(scroll.offset * (linePoints.length - 1)),
-      linePoints.length - 1
-    );
-    const curPoint = linePoints[idx];
-    const nextPoint = linePoints[Math.min(idx + 1, linePoints.length - 1)];
-
-    // حرك السفينة بسلاسة لموضع curPoint
-    spaceshipRef.current.position.lerp(
-      tmpA.copy(curPoint),
-      Math.min(delta * 60, 1)
-    );
-
-    // وجّه السفينة باتجاه الحركة (slerp للنعومة)
-    if (nextPoint) {
-      tmpB.copy(nextPoint).sub(curPoint).normalize();
-      const targetQ = new THREE.Quaternion().setFromUnitVectors(
-        new THREE.Vector3(0, 0, 1), // افتراض أن موديلك يتقدم على +Z
-        tmpB
-      );
-      spaceshipRef.current.quaternion.slerp(targetQ, Math.min(delta * 8, 1));
+    // ===== حساب التقدّم بناءً على السرعة (وحدات/ثانية) وليس على الفريمات =====
+    // خطوة الprogress = (shipSpeed * delta) / طول_المنحنى
+    // هذا يضمن أن السفينة تتحرك بمعدل ثابت (وحدات/ثانية) مهما كان طول المسار.
+    if (curveLength > 0) {
+      progress.current += (shipSpeed * delta) / curveLength;
     }
 
-    // --- تحديث الكاميرا المتبعة (هذه الكاميرا هي الافتراضية الآن) ---
+    // loop عند الوصول للنهاية (أو استخدم clamp لو تحب تتوقف)
+    if (progress.current > 1) {
+      progress.current -= 1; // يلف من البداية مرة تانية
+    } else if (progress.current < 0) {
+      progress.current += 1;
+    }
+
+    // الحصول على نقطة واتجاه بناءً على نسبة الطول u (0..1)
+    const u = THREE.MathUtils.clamp(progress.current, 0, 1);
+    curve.getPointAt(u, tmpA); // tmpA = curPoint
+    curve.getTangentAt(u, tmpB); // tmpB = tangent (unit)
+
+    // حرك السفينة بسلاسة للموقع الجديد
+    spaceshipRef.current.position.lerp(tmpA, Math.min(delta * 60, 1));
+
+    // للحصول على دوران ناعم استخدم "look ahead" صغير
+    const eps = 1e-4;
+    const uNext = THREE.MathUtils.clamp(u + eps, 0, 1);
+    curve.getTangentAt(uNext, tmpC);
+
+    const targetQ = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1), // نفترض موديل السفينة متجه +Z
+      tmpC.clone().normalize()
+    );
+    spaceshipRef.current.quaternion.slerp(targetQ, Math.min(delta * 8, 1));
+
+    // --- تحديث الكاميرا المتبعة (makeDefault) ---
     if (followCamRef.current) {
-      // حول الـ offset المحلي إلى عالمى باستخدام quaternion السفينة
+      // حوالة offset محلي لعالمى
       const worldOffset = tmpB
         .copy(localCamOffset)
         .applyQuaternion(spaceshipRef.current.quaternion);
@@ -79,19 +96,17 @@ export default function Experience() {
         .copy(spaceshipRef.current.position)
         .add(worldOffset);
 
-      // لِمْحَة: نستخدم lerp للسلاسة
       followCamRef.current.position.lerp(desiredCamPos, Math.min(delta * 5, 1));
 
-      // اجعل الكاميرا تنظر للسفينة (نقطة فوقها قليلًا)
+      // الكاميرا تبص على السفينة بقليل ارتفاع
       const lookTarget = tmpB
         .copy(spaceshipRef.current.position)
         .add(new THREE.Vector3(0, 1, 0));
       followCamRef.current.lookAt(lookTarget);
 
-      // تحديث خط النظر (camera -> lookTarget)
+      // خطوط الديباغ
       setLineFromTo(lookLineRef, followCamRef.current.position, lookTarget);
 
-      // تحديث خط اتجاه الكاميرا (based on getWorldDirection)
       const dir = new THREE.Vector3();
       followCamRef.current.getWorldDirection(dir);
       const forwardEnd = tmpA
@@ -100,7 +115,7 @@ export default function Experience() {
       setLineFromTo(camForwardRef, followCamRef.current.position, forwardEnd);
     }
 
-    // --- تحديث أشعة السفينة المحلية (forward/right/up) ---
+    // --- تحديث أشعة السفينة المحلية ---
     const spaceshipPos = spaceshipRef.current.position;
     const spaceshipQuat = spaceshipRef.current.quaternion;
 
@@ -148,6 +163,7 @@ export default function Experience() {
         position={[30, 30, 30]}
         fov={60}
       />
+      <OrbitControls makeDefault={false} camera={overviewCamRef.current} />
 
       {/* Follow camera — هذه الكاميرا الأساسية (makeDefault) تبص دايمًا على السفينة */}
       <PerspectiveCamera
@@ -157,7 +173,7 @@ export default function Experience() {
         fov={90}
       />
 
-      {/* CameraHelpers لفرستوم الكاميرات (تشغيلها يساعدك تشوف الفراستوم) */}
+      {/* CameraHelpers */}
       {overviewCamRef.current && (
         <primitive object={new THREE.CameraHelper(overviewCamRef.current)} />
       )}
@@ -176,7 +192,7 @@ export default function Experience() {
         <lineBasicMaterial color="cyan" linewidth={2} />
       </line>
 
-      {/* السفينة نفسها — نلفها بـ group عشان نضمن ref يعمل حتى لو الموديل مش forwardRef */}
+      {/* السفينة نفسها */}
       <group ref={spaceshipRef} position={[0, 0, 0]} scale={0.5}>
         <Spaceship />
       </group>
@@ -206,10 +222,10 @@ export default function Experience() {
               steps: LINE_NB_POINTS,
               bevelEnabled: false,
               extrudePath: curve,
-              depth: 0.01, // Make the path flat and thin
+              depth: 0.01,
               bevelThickness: 0,
               bevelSize: 0,
-              curveSegments: 12, // optional, for smoothness
+              curveSegments: 12,
             },
           ]}
         />
