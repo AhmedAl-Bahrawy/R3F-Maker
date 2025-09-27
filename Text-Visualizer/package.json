@@ -1,0 +1,37 @@
+{
+  "name": "Text-Visualizer",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext js,jsx,ts,tsx",
+    "clean": "rm -rf dist node_modules package-lock.json"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "three": "^0.160.0",
+    "@react-three/fiber": "^8.15.19",
+    "@react-three/drei": "^9.88.13",
+    "leva": "^0.9.35",
+    "zustand": "^4.5.5",
+    "@use-gesture/react": "^10.3.1",
+    "@react-three/cannon": "^6.6.0",
+    "@react-three/rapier": "^1.4.0",
+    "@react-spring/three": "^9.7.3",
+    "gsap": "^3.12.5",
+    "@react-three/postprocessing": "^2.16.2",
+    "maath": "^0.10.7",
+    "three-stdlib": "^2.29.9"
+  },
+  "devDependencies": {
+    "vite": "^5.0.12",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.0"
+  }
+}

@@ -163,7 +163,11 @@ export default function Experience() {
         position={[30, 30, 30]}
         fov={60}
       />
-      <OrbitControls makeDefault={false} camera={overviewCamRef.current} />
+      <OrbitControls
+        makeDefault={false}
+        camera={overviewCamRef.current}
+        useScroll={false}
+      />
 
       {/* Follow camera — هذه الكاميرا الأساسية (makeDefault) تبص دايمًا على السفينة */}
       <PerspectiveCamera
@@ -171,6 +175,7 @@ export default function Experience() {
         makeDefault
         position={[0, 2, -6]}
         fov={90}
+        useScroll={false}
       />
 
       {/* CameraHelpers */}
