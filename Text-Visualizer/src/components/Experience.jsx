@@ -8,8 +8,9 @@ import CameraSystem from "./CameraSystem";
 import HelperLines from "./HelperLines";
 import SpaceshipController from "./SpaceshipController";
 import PathVisualizer from "./PathVisualizer";
+import TextViewer from "./TextViewer";
 
-const LINE_NB_POINTS = 100000;
+const LINE_NB_POINTS = 10000;
 
 export default function Experience() {
   // --- path curve ---
@@ -32,7 +33,8 @@ export default function Experience() {
   const progress = useRef(0);
 
   // ship speed (units per second)
-  const shipSpeed = 15;
+  const shipSpeed = 20;
+  const canMove = true;
 
   // reusable vectors
   const tmpA = useMemo(() => new THREE.Vector3(), []);
@@ -41,7 +43,7 @@ export default function Experience() {
   const localCamOffset = useMemo(() => new THREE.Vector3(0, 2, -6), []);
 
   useFrame((state, delta) => {
-    if (!spaceshipRef.current) return;
+    if (!spaceshipRef.current || !canMove) return;
 
     // Update progress based on speed
     if (curveLength > 0) {
@@ -97,9 +99,12 @@ export default function Experience() {
         lookLineRef={lookLineRef}
         camForwardRef={camForwardRef}
         spaceshipRef={spaceshipRef}
+        useHelpers={false}
       />
 
       <PathVisualizer curve={curve} lineNbPoints={LINE_NB_POINTS} />
+
+      <TextViewer />
 
       {/* Basic lighting */}
       <ambientLight intensity={0.6} />

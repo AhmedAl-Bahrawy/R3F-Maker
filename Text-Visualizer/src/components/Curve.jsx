@@ -1,65 +1,104 @@
 import * as THREE from "three";
 
-// Simplified, longer and much smoother curve generator.
-// - Longer length by default
-// - Lower-frequency sine components for broad, slow sweeps
-// - Very small randomness (off by default) so motion stays smooth
-// - Slight easing applied so climbs/descents feel gradual
-
+// Very simple path with gentle curves
 export default function Curve({
-  length = 120, // more control points => longer curve
-  waves = 8, // fewer main waves => broader turns
-  amplitudeX = 12, // gentle left-right amplitude
-  amplitudeY = 7, // gentle up-down amplitude
-  forwardSpacing = 2, // spacing along Z
-  randomness = 0.2, // set small (0.2..) if you want tiny jitter
-  closed = true,
-  tension = 0.7, // slightly smoother tangents
+  // Basic settings
+  pointsPerSegment = 2, // نقط أقل = انحناءات أقل
+  gentleCurves = 2, // انحناءات بسيطة جداً
+  curveFrequency = 1, // مسافات أكبر بين الانحناءات
+
+  // Curve properties
+  tension = 0.6,
+  closed = false,
+
+  // Required points
+  requiredPoints = [
+    // === مرحلة الذهاب - اتجاهات مختلفة ===
+    new THREE.Vector3(0, 0, 0), // نقطة البداية
+    new THREE.Vector3(15, 2, 25), // انحناء بسيط يمين
+    new THREE.Vector3(30, -3, 50), // انحناء شمال
+    new THREE.Vector3(45, 5, 75), // صعود يمين
+    new THREE.Vector3(50, 8, 100), // أعلى نقطة
+    new THREE.Vector3(40, 10, 125), // نزول بسيط شمال
+    new THREE.Vector3(25, 12, 150), // استمرار شمال
+
+    // === الدوران الدائري (نصف دائرة) ===
+    new THREE.Vector3(10, 15, 165), // بداية الدوران
+    new THREE.Vector3(-5, 18, 175), // ربع الدائرة الأول
+    new THREE.Vector3(-15, 20, 180), // نص الدائرة (أقصى شمال)
+    new THREE.Vector3(-10, 22, 185), // ثلاثة أرباع
+    new THREE.Vector3(5, 20, 195), // نهاية الدوران - بداية العودة
+
+    // === مسار العودة - اتجاهات عكسية ===
+    new THREE.Vector3(20, 18, 210), // بداية العودة يمين
+    new THREE.Vector3(35, 15, 235), // استمرار يمين
+    new THREE.Vector3(50, 12, 260), // وصول للجانب الأيمن
+    new THREE.Vector3(45, 8, 285), // نزول من الأعلى
+    new THREE.Vector3(30, 5, 310), // انحناء شمال
+    new THREE.Vector3(15, 2, 335), // قرب النهاية
+    new THREE.Vector3(5, 0, 350), // العودة للمركز تقريباً
+    new THREE.Vector3(0, 0, 365),
+  ],
 } = {}) {
-  const pts = [];
+  if (!requiredPoints || requiredPoints.length < 2) {
+    throw new Error("Need at least 2 required points");
+  }
 
-  // small deterministic jitter helper (optional)
+  // تحويل النقط (بدون ترتيب - نحافظ على ترتيب المستخدم)
+  const points = requiredPoints.map((p) => {
+    if (p instanceof THREE.Vector3) return p.clone();
+    return new THREE.Vector3(p.x || 0, p.y || 0, p.z || 0);
+  });
+
+  const finalPoints = [];
+
+  // Random بسيط
   let seed = 42;
-  function jitter(scale = 1) {
-    if (!randomness) return 0;
+  function simpleRandom() {
     seed = (seed * 1664525 + 1013904223) | 0;
-    return (((seed >>> 0) % 1000) / 1000 - 0.5) * randomness * scale;
+    return ((seed >>> 0) % 1000) / 1000;
   }
 
-  for (let i = 0; i < length; i++) {
-    const t = i / (length - 1); // 0..1 along path
+  // لكل مقطع بين نقطتين
+  for (let i = 0; i < points.length - 1; i++) {
+    const startPoint = points[i];
+    const endPoint = points[i + 1];
 
-    // Ease curve to slow the start/stop of large movements
-    // cosine ease-in-out: starts slow, accelerates, slows down
-    const ease = 0.5 - 0.5 * Math.cos(Math.PI * t);
+    // إضافة النقطة الأولى
+    if (i === 0) {
+      finalPoints.push(startPoint.clone());
+    }
 
-    // Broad left-right motion (low frequency) and very smooth
-    const leftRight = Math.sin(t * Math.PI * 2 * waves) * amplitudeX * ease;
+    // إنشاء نقط قليلة بين النقطتين مع انحناءات بسيطة
+    for (let j = 1; j <= pointsPerSegment; j++) {
+      const t = j / (pointsPerSegment + 1);
 
-    // Slower up-down motion (half the frequency of left-right)
-    const upDown =
-      Math.sin(t * Math.PI * 2 * (waves * 0.5) - Math.PI / 2) *
-      amplitudeY *
-      ease;
+      // النقطة على الخط المستقيم
+      const straightPoint = startPoint.clone().lerp(endPoint, t);
 
-    // Forward Z position
-    const z = i * forwardSpacing;
+      // انحناء بسيط جداً - مسافات أكبر
+      const wavePhase = t * Math.PI * curveFrequency;
 
-    const x = leftRight + jitter(0.6);
-    const y = upDown + jitter(0.4);
+      // انحناء يمين/شمال - بسيط جداً
+      const sideWave = Math.sin(wavePhase) * gentleCurves;
 
-    pts.push(new THREE.Vector3(x, y, z));
+      // انحناء فوق/تحت - أبسط
+      const upWave = Math.cos(wavePhase * 0.7) * gentleCurves * 0.6;
+
+      // شوية تنويع عشوائي خفيف جداً
+      const randomOffset = (simpleRandom() - 0.5) * gentleCurves * 0.3;
+
+      // تطبيق الانحناءات البسيطة
+      straightPoint.x += sideWave + randomOffset;
+      straightPoint.y += upWave + randomOffset * 0.5;
+
+      finalPoints.push(straightPoint);
+    }
+
+    // إضافة النقطة النهائية
+    finalPoints.push(endPoint.clone());
   }
 
-  // Add a single back and front point to avoid abrupt tangent at ends
-  const start = pts[0];
-  const before = new THREE.Vector3(start.x, start.y, start.z - forwardSpacing);
-  pts.unshift(before);
-
-  const last = pts[pts.length - 1];
-  const after = new THREE.Vector3(last.x, last.y, last.z + forwardSpacing);
-  pts.push(after);
-
-  // Create the Catmull-Rom curve
-  return new THREE.CatmullRomCurve3(pts, closed, "catmullrom", tension);
+  // منحنى بسيط جداً
+  return new THREE.CatmullRomCurve3(finalPoints, closed, "catmullrom", tension);
 }

@@ -73,7 +73,7 @@ export default function CameraSystem({
       {/* Follow camera — this is the main camera (makeDefault) always looking at the spaceship */}
       <PerspectiveCamera
         ref={followCamRef}
-        makeDefault
+        makeDefault={true}
         position={[0, 2, -6]}
         fov={90}
       />
